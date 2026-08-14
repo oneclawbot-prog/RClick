@@ -61,7 +61,7 @@ RClick 决定放弃 App Store 发布，转为纯开源项目。需要两个关�
 | 0. 准备 | Checkout, 选 Xcode, 从 tag 提取版本号 | `actions/checkout@v4` |
 | 1. 导入证书 | 创建临时 keychain, 导入 Developer ID 证书 | `security import` |
 | 2. 构建 | xcodebuild Release, `CODE_SIGNING_ALLOWED=NO`, `ARCHS=arm64` | `xcodebuild` |
-| 3. 分层签名 | Frameworks → Extensions → Main App, `--options runtime` | `codesign` |
+| 3. 授权并分层签名 | 校验并嵌入主 App/扩展的 Developer ID profile，再签 Frameworks → Extension → Main App | `security cms` + `codesign` |
 | 4. 打包 ZIP | `ditto -c -k` 打包用于公证 | `ditto` |
 | 5. 公证 | `notarytool submit` 使用 App Store Connect API Key (p8) | `xcrun notarytool` |
 | 6. 装订票据 | `stapler staple` + `spctl --assess` 验证 | `xcrun stapler` |
@@ -76,6 +76,8 @@ RClick 决定放弃 App Store 发布，转为纯开源项目。需要两个关�
 |--------|------|
 | `MACOS_CERT_P12` | Developer ID Application 证书的 base64 |
 | `MACOS_CERT_PASSWORD` | 证书导出密码 |
+| `MACOS_APP_PROVISIONING_PROFILE` | `cn.wflixu.RClick` 的 Developer ID provisioning profile（base64），须授权 `group.cn.wflixu.RClick` |
+| `MACOS_EXTENSION_PROVISIONING_PROFILE` | `cn.wflixu.RClick.FinderSyncExt` 的 Developer ID provisioning profile（base64），须授权同一 App Group |
 | `APPLE_TEAM_ID` | Apple Developer Team ID |
 | `NOTARY_KEY_ID` | App Store Connect API Key ID |
 | `NOTARY_ISSUER_ID` | API Key Issuer ID |
@@ -87,16 +89,19 @@ RClick 决定放弃 App Store 发布，转为纯开源项目。需要两个关�
 
 | 文件 | 对象 | 关键权限 |
 |------|------|---------|
-| `RClick/RClick.entitlements` | 主 App (Release) | app-groups, bookmarks, user-selected.read-write, **temporary-exception.apple-events**, **temporary-exception.files.home-relative-path.read-write(/)**, app-sandbox(通过 build setting) |
+| `RClick/RClick.entitlements` | 主 App (Release) | app-groups, bookmarks, user-selected.read-write, **temporary-exception.apple-events**, **temporary-exception.files.home-relative-path.read-write(/)**；为兼容 Accessibility，主 App 不启用 App Sandbox |
 | `RClick/RClickDebug.entitlements` | 主 App (Debug) | app-groups, bookmarks, temporary-exception.files.home-relative-path.read-write(/) |
 | `FinderSyncExt/FinderSyncExt.entitlements` | 扩展 | app-groups, bookmarks, app-sandbox(通过 build setting) |
 
-**Release 签名策略**：**不创建动态 entitlements**，直接使用项目已有文件。
+`group.` 前缀的 App Group 在 macOS 上必须由每个进程自己的 provisioning profile 授权。主 App 和 FinderSync 扩展使用不同 Bundle ID，因此需要各自的 Developer ID profile；二者都必须包含 `group.cn.wflixu.RClick`。
+
+**Release 签名策略**：以项目 entitlements 为基础，签名前精确校验 profile 的 Bundle ID、App Group 和签名证书，再补入 `com.apple.application-identifier` 与 `com.apple.developer.team-identifier`。所有代码签名均使用导入证书的 identity hash，避免同名证书歧义。
 
 构建时 `CODE_SIGNING_ALLOWED=NO`，然后分层手动签名：
-1. **Frameworks**（如有）：`codesign --force --options runtime --timestamp --sign "$CERT_NAME"`
-2. **FinderSyncExt.appex**：`codesign` + 使用 `FinderSyncExt/FinderSyncExt.entitlements`
-3. **RClick.app**：`codesign` + 使用 `RClick/RClick.entitlements` + `--options runtime`
+1. **Frameworks**（如有）：`codesign --force --options runtime --timestamp --sign "$CERT_IDENTITY"`
+2. **FinderSyncExt.appex**：嵌入扩展 profile，使用补全身份声明后的 `FinderSyncExt.entitlements` 签名
+3. **RClick.app**：嵌入主 App profile，使用补全身份声明后的 `RClick.entitlements` + `--options runtime` 签名
+4. **验证**：检查两份 profile 存在、最终签名包含各自 application identifier 和 App Group，并执行 `codesign --verify --deep --strict`
 
 **公证注意事项**：`RClick.entitlements` 包含 `temporary-exception.files.home-relative-path.read-write` 设为 `/`（整个家目录），这是一个宽泛的临时例外。RClick 作为 Finder 右键扩展需要访问用户在 Finder 中选中的任意文件，功能上合理。公证时 Apple 可能会审查此项，若不通过则需要收紧权限范围。
 
