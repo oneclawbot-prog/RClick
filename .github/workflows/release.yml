@@ -18,7 +18,10 @@ jobs:
     runs-on: macos-latest
     env:
       APP_NAME: RClick
+      APP_BUNDLE_ID: cn.wflixu.RClick
       EXTENSION_NAME: FinderSyncExt
+      EXTENSION_BUNDLE_ID: cn.wflixu.RClick.FinderSyncExt
+      APP_GROUP_ID: group.cn.wflixu.RClick
       SCHEME: RClick
       PROJECT: RClick.xcodeproj
     steps:
@@ -63,9 +66,104 @@ jobs:
 
           security list-keychains -d user -s build.keychain login.keychain
 
-          CERT_NAME=$(security find-identity -v -s 'Developer ID Application' | head -n 1 | awk -F'"' '{print $2}')
-          echo "CERT_NAME=$CERT_NAME" >> $GITHUB_ENV
-          echo "Using certificate: $CERT_NAME"
+          IDENTITY_INFO=$(security find-identity -v -p codesigning build.keychain \
+            | awk '/"Developer ID Application:/')
+          IDENTITY_COUNT=$(printf '%s\n' "$IDENTITY_INFO" \
+            | awk 'NF { count++ } END { print count + 0 }')
+          if [ "$IDENTITY_COUNT" -ne 1 ]; then
+            echo "Expected exactly one Developer ID Application identity, found $IDENTITY_COUNT"
+            printf '%s\n' "$IDENTITY_INFO"
+            exit 1
+          fi
+
+          CERT_IDENTITY=$(printf '%s\n' "$IDENTITY_INFO" | awk '{print $2}')
+          CERT_NAME=$(printf '%s\n' "$IDENTITY_INFO" | awk -F'"' '{print $2}')
+          echo "CERT_IDENTITY=$CERT_IDENTITY" >> "$GITHUB_ENV"
+          echo "Using certificate: $CERT_NAME ($CERT_IDENTITY)"
+
+      - name: Prepare App Group Provisioning Profiles
+        env:
+          APP_PROFILE_BASE64: ${{ secrets.MACOS_APP_PROVISIONING_PROFILE }}
+          EXTENSION_PROFILE_BASE64: ${{ secrets.MACOS_EXTENSION_PROVISIONING_PROFILE }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          : "${APP_PROFILE_BASE64:?Missing MACOS_APP_PROVISIONING_PROFILE secret}"
+          : "${EXTENSION_PROFILE_BASE64:?Missing MACOS_EXTENSION_PROVISIONING_PROFILE secret}"
+          : "${TEAM_ID:?Missing APPLE_TEAM_ID secret}"
+          : "${CERT_IDENTITY:?Missing Developer ID Application identity}"
+
+          mkdir -p signing
+          APP_PROFILE_PATH="$PWD/signing/${APP_NAME}.provisionprofile"
+          EXTENSION_PROFILE_PATH="$PWD/signing/${EXTENSION_NAME}.provisionprofile"
+          printf '%s' "$APP_PROFILE_BASE64" | base64 --decode > "$APP_PROFILE_PATH"
+          printf '%s' "$EXTENSION_PROFILE_BASE64" | base64 --decode > "$EXTENSION_PROFILE_PATH"
+
+          security cms -D -i "$APP_PROFILE_PATH" -o signing/app-profile.plist
+          security cms -D -i "$EXTENSION_PROFILE_PATH" -o signing/extension-profile.plist
+
+          validate_profile() {
+            local profile_plist="$1"
+            local expected_bundle_id="$2"
+
+            python3 - \
+              "$profile_plist" \
+              "$expected_bundle_id" \
+              "$TEAM_ID" \
+              "$APP_GROUP_ID" \
+              "$CERT_IDENTITY" <<'PY'
+          import hashlib
+          import plistlib
+          import sys
+
+          profile_path, expected_bundle_id, expected_team, expected_group, signing_identity = sys.argv[1:]
+          with open(profile_path, "rb") as profile_file:
+              profile = plistlib.load(profile_file)
+
+          entitlements = profile.get("Entitlements", {})
+          actual_identifier = entitlements.get("com.apple.application-identifier", "")
+          _, separator, actual_bundle_id = actual_identifier.partition(".")
+          if not separator or actual_bundle_id != expected_bundle_id:
+              raise SystemExit(
+                  f"Provisioning profile does not match bundle ID "
+                  f"{expected_bundle_id}: {actual_identifier}"
+              )
+
+          actual_team = entitlements.get("com.apple.developer.team-identifier")
+          if actual_team != expected_team:
+              raise SystemExit(
+                  f"Provisioning profile team mismatch: expected {expected_team}, got {actual_team}"
+              )
+
+          actual_groups = entitlements.get("com.apple.security.application-groups")
+          if not isinstance(actual_groups, list) or expected_group not in actual_groups:
+              raise SystemExit(f"Provisioning profile does not authorize {expected_group}")
+
+          certificate_hashes = {
+              hashlib.sha1(certificate).hexdigest().upper()
+              for certificate in profile.get("DeveloperCertificates", [])
+              if isinstance(certificate, bytes)
+          }
+          if signing_identity.upper() not in certificate_hashes:
+              raise SystemExit(
+                  f"Provisioning profile does not contain signing certificate {signing_identity}"
+              )
+          PY
+          }
+
+          validate_profile signing/app-profile.plist "$APP_BUNDLE_ID"
+          validate_profile signing/extension-profile.plist "$EXTENSION_BUNDLE_ID"
+          APP_IDENTIFIER=$(/usr/libexec/PlistBuddy \
+            -c 'Print :Entitlements:com.apple.application-identifier' \
+            signing/app-profile.plist)
+          EXTENSION_IDENTIFIER=$(/usr/libexec/PlistBuddy \
+            -c 'Print :Entitlements:com.apple.application-identifier' \
+            signing/extension-profile.plist)
+
+          echo "APP_PROFILE_PATH=$APP_PROFILE_PATH" >> "$GITHUB_ENV"
+          echo "EXTENSION_PROFILE_PATH=$EXTENSION_PROFILE_PATH" >> "$GITHUB_ENV"
+          echo "APP_IDENTIFIER=$APP_IDENTIFIER" >> "$GITHUB_ENV"
+          echo "EXTENSION_IDENTIFIER=$EXTENSION_IDENTIFIER" >> "$GITHUB_ENV"
 
       # --- 2. 构建 Release App ---
       - name: Build Release
@@ -102,10 +200,29 @@ jobs:
 
       # --- 3. 分层代码签名 ---
       - name: Code Sign
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
 
-          echo "Signing with: $CERT_NAME"
+          echo "Signing with identity: $CERT_IDENTITY"
+
+          MAIN_ENTITLEMENTS="signing/${APP_NAME}.entitlements"
+          EXTENSION_ENTITLEMENTS="signing/${EXTENSION_NAME}.entitlements"
+          cp "${APP_NAME}/${APP_NAME}.entitlements" "$MAIN_ENTITLEMENTS"
+          cp "${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements" "$EXTENSION_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy \
+            -c "Add :com.apple.application-identifier string $APP_IDENTIFIER" \
+            "$MAIN_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy \
+            -c "Add :com.apple.developer.team-identifier string $TEAM_ID" \
+            "$MAIN_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy \
+            -c "Add :com.apple.application-identifier string $EXTENSION_IDENTIFIER" \
+            "$EXTENSION_ENTITLEMENTS"
+          /usr/libexec/PlistBuddy \
+            -c "Add :com.apple.developer.team-identifier string $TEAM_ID" \
+            "$EXTENSION_ENTITLEMENTS"
 
           # 1) 签名所有 framework
           if [ -d "$APP_PATH/Contents/Frameworks" ]; then
@@ -113,32 +230,45 @@ jobs:
             find "$APP_PATH/Contents/Frameworks" -type f -perm +111 \
               -exec codesign --force --options runtime \
                 --timestamp \
-                --sign "$CERT_NAME" {} \;
+                --sign "$CERT_IDENTITY" {} \;
           fi
 
           # 2) 签名扩展 (FinderSyncExt.appex)
           echo "Signing FinderSync extension..."
           EXT_PATH="$APP_PATH/Contents/PlugIns/${EXTENSION_NAME}.appex"
           if [ -d "$EXT_PATH" ]; then
+            cp "$EXTENSION_PROFILE_PATH" "$EXT_PATH/Contents/embedded.provisionprofile"
             codesign --force --options runtime \
               --timestamp \
-              --entitlements "${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements" \
-              --sign "$CERT_NAME" \
+              --entitlements "$EXTENSION_ENTITLEMENTS" \
+              --sign "$CERT_IDENTITY" \
               "$EXT_PATH"
+          else
+            echo "FinderSync extension not found at $EXT_PATH"
+            exit 1
           fi
 
-          # 3) 签名主 App (使用项目 entitlements)
+          # 3) 嵌入主 App profile 并签名
           echo "Signing main app..."
+          cp "$APP_PROFILE_PATH" "$APP_PATH/Contents/embedded.provisionprofile"
           codesign --force --options runtime \
             --timestamp \
-            --entitlements "${APP_NAME}/${APP_NAME}.entitlements" \
-            --sign "$CERT_NAME" \
+            --entitlements "$MAIN_ENTITLEMENTS" \
+            --sign "$CERT_IDENTITY" \
             "$APP_PATH"
 
-          # 验证签名
-          echo "Verifying signatures..."
+          # 验证签名、profile 和 App Group 身份声明
+          echo "Verifying signatures and App Group authorization..."
+          test -f "$APP_PATH/Contents/embedded.provisionprofile"
+          test -f "$EXT_PATH/Contents/embedded.provisionprofile"
+          APP_SIGNED_ENTITLEMENTS=$(codesign -d --entitlements - "$APP_PATH" 2>&1)
+          EXTENSION_SIGNED_ENTITLEMENTS=$(codesign -d --entitlements - "$EXT_PATH" 2>&1)
+          grep -Fq "$APP_IDENTIFIER" <<< "$APP_SIGNED_ENTITLEMENTS"
+          grep -Fq "$EXTENSION_IDENTIFIER" <<< "$EXTENSION_SIGNED_ENTITLEMENTS"
+          grep -Fq "$APP_GROUP_ID" <<< "$APP_SIGNED_ENTITLEMENTS"
+          grep -Fq "$APP_GROUP_ID" <<< "$EXTENSION_SIGNED_ENTITLEMENTS"
           codesign -dv --verbose=4 "$APP_PATH" 2>&1
-          codesign --verify --verbose "$APP_PATH"
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
 
       # --- 4. 打包为 ZIP 用于公证 ---
       - name: Zip for Notarization
@@ -217,7 +347,7 @@ jobs:
             "$DMG_NAME" \
             "$DMG_STAGING/${APP_NAME}.app"
 
-          codesign --force --sign "$CERT_NAME" "$DMG_NAME"
+          codesign --force --sign "$CERT_IDENTITY" "$DMG_NAME"
 
           rm -rf "$DMG_STAGING"
 

@@ -168,7 +168,7 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
     }
 
     override var toolbarItemToolTip: String {
-        return "RClick: Click for menu options"
+        return AppLocalization.localized("RClick: Click for menu options")
     }
 
     override var toolbarItemImage: NSImage {

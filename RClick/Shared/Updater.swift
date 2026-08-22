@@ -273,6 +273,8 @@ class UpdateManager: ObservableObject {
         var request = URLRequest(url: URL(string: asset.browserDownloadUrl)!)
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
         
+        let downloadFailedMessage = AppLocalization.localized("Download failed")
+        
         // 使用 AsyncThrowingStream 来包装下载进度和结果
         return try await withCheckedThrowingContinuation { continuation in
             // Stream bytes and write to destination file
@@ -290,7 +292,7 @@ class UpdateManager: ObservableObject {
                       let httpResponse = response as? HTTPURLResponse,
                       httpResponse.statusCode == 200
                 else {
-                    continuation.resume(throwing: DownloadError.downloadFailed("下载失败"))
+                    continuation.resume(throwing: DownloadError.downloadFailed(downloadFailedMessage))
                     print("downn error")
                     return
                 }
@@ -337,7 +339,7 @@ class UpdateManager: ObservableObject {
         
         guard process.terminationStatus == 0 else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorString = String(data: errorData, encoding: .utf8) ?? "未知错误"
+            let errorString = String(data: errorData, encoding: .utf8) ?? AppLocalization.localized("Unknown error")
             throw InstallationError.zipExtractionFailed(String(format: AppLocalization.localized("Extraction failed: %@"), errorString))
         }
         
