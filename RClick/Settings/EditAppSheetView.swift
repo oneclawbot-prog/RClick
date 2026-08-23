@@ -16,6 +16,7 @@ struct EditAppSheetView: View {
     @State private var itemName: String
     @State private var arguments: String
     @State private var environment: String
+    @State private var opensNewInstance: Bool
 
     let messager = Messager.shared
 
@@ -25,6 +26,7 @@ struct EditAppSheetView: View {
         _itemName = State(initialValue: app.itemName)
         _arguments = State(initialValue: app.arguments.joined(separator: "; "))
         _environment = State(initialValue: app.environment.map { "\($0.key)=\($0.value)" }.joined(separator: "\n"))
+        _opensNewInstance = State(initialValue: app.opensNewInstance)
     }
 
     var body: some View {
@@ -63,6 +65,17 @@ struct EditAppSheetView: View {
                     Text(appLocalized: "Format: KEY=VALUE, one per line")
                         .foregroundColor(.secondary)
                 }
+
+                Section {
+                    Toggle(isOn: $opensNewInstance) {
+                        Text(appLocalized: "Open in a new window")
+                    }
+                } header: {
+                    Text(appLocalized: "Window")
+                } footer: {
+                    Text(appLocalized: "For browser-like apps, launch a new instance instead of opening a new tab in the running one")
+                        .foregroundColor(.secondary)
+                }
             }
             .formStyle(.grouped)
 
@@ -88,7 +101,8 @@ struct EditAppSheetView: View {
             id: app.id,
             itemName: itemName,
             arguments: arguments.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
-            environment: parseEnvironmentVariables(environment)
+            environment: parseEnvironmentVariables(environment),
+            opensNewInstance: opensNewInstance
         )
         messager.sendRunningNotification()
     }

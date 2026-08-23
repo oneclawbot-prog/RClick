@@ -38,6 +38,7 @@ final class ConfigService {
             app.inheritFromGlobalEnvironment = entity.inheritFromGlobalEnvironment
             app.arguments = entity.arguments
             app.environment = entity.environment
+            app.opensNewInstance = entity.opensNewInstance
             return app
         } ?? []
 

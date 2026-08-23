@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SwiftData
 import Testing
 @testable import RClick
 
@@ -75,5 +76,22 @@ final class ActionServiceTests {
 
         // 授权后应执行删除 → 文件被移除
         #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
+    @Test func appEntityPersistsOpensNewInstance() throws {
+        // in-memory 容器，避免触碰真实 App Group 库
+        let container = try ModelContainer(
+            for: AppEntity.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+
+        var app = OpenWithApp(appURL: URL(fileURLWithPath: "/Applications/Safari.app"))
+        app.opensNewInstance = true
+        context.insert(AppEntity(from: app, sortOrder: 0))
+        try context.save()
+
+        let fetched = try context.fetch(FetchDescriptor<AppEntity>())
+        #expect(fetched.first?.opensNewInstance == true)
     }
 }

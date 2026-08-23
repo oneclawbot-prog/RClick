@@ -4730,6 +4730,93 @@
           }
         }
       }
+    },
+    "Open in a new window": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in a new window"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir en una nueva ventana"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいウィンドウで開く"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在新窗口中打开"
+          }
+        }
+      }
+    },
+    "Window": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ventana"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウィンドウ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "窗口"
+          }
+        }
+      }
+    },
+    "For browser-like apps, launch a new instance instead of opening a new tab in the running one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For browser-like apps, launch a new instance instead of opening a new tab in the running one"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para apps tipo navegador, lanza una nueva instancia en lugar de abrir una pestaña en la ya abierta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウザ系アプリの場合、起動中のインスタンスに新しいタブを開く代わりに、新しいインスタンスを起動します"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对浏览器类 app，改为启动新实例，而不是在已运行的实例中新开标签页"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

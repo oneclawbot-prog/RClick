@@ -46,16 +46,16 @@ final class ActionService {
         }
 
         let appUrl = rcitem.url
-        logger.debug("openApp: rid=\(rid) app=\(appUrl.path) target=\(target)")
+        logger.debug("openApp: rid=\(rid) app=\(appUrl.path) target=\(target) opensNewInstance=\(rcitem.opensNewInstance)")
 
         for dirPath in target {
             let decodedPath = dirPath.removingPercentEncoding ?? dirPath
             let url = URL(fileURLWithPath: decodedPath)
-            await openWithApp(url, appUrl: appUrl)
+            await openWithApp(url, appUrl: appUrl, opensNewInstance: rcitem.opensNewInstance)
         }
     }
 
-    private func openWithApp(_ url: URL, appUrl: URL) async {
+    private func openWithApp(_ url: URL, appUrl: URL, opensNewInstance: Bool) async {
         let logger = self.logger  // 捕获 Sendable logger，供完成回调使用
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
@@ -70,12 +70,14 @@ final class ActionService {
         }
 
         let config = NSWorkspace.OpenConfiguration()
+        // 以新实例打开（浏览器类 app 会新开窗口而非新 tab）
+        config.createsNewApplicationInstance = opensNewInstance
         NSWorkspace.shared.open([url], withApplicationAt: appUrl, configuration: config) { [weak self] runningApp, error in
             guard let self else { return }
             if let error {
                 // 失败兜底：再弹授权并重试一次
                 Task { @MainActor in
-                    await self.openRetryAfterPermission(url: url, appUrl: appUrl, accessURL: accessURL, firstError: error)
+                    await self.openRetryAfterPermission(url: url, appUrl: appUrl, accessURL: accessURL, opensNewInstance: opensNewInstance, firstError: error)
                 }
             } else if let runningApp {
                 logger.debug("Successfully opened with application: \(runningApp.localizedName ?? "Unknown")")
@@ -83,13 +85,14 @@ final class ActionService {
         }
     }
 
-    private func openRetryAfterPermission(url: URL, appUrl: URL, accessURL: URL, firstError: Error) async {
+    private func openRetryAfterPermission(url: URL, appUrl: URL, accessURL: URL, opensNewInstance: Bool, firstError: Error) async {
         let logger = self.logger  // 捕获 Sendable logger
         guard await permission.promptForPermission(for: accessURL) != nil else {
             logger.error("打开失败且用户取消授权：\(url.path) — \(firstError.localizedDescription)")
             return
         }
         let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = opensNewInstance
         NSWorkspace.shared.open([url], withApplicationAt: appUrl, configuration: config) { _, retryError in
             if let retryError {
                 logger.error("重试打开仍失败：\(url.path) — \(retryError.localizedDescription)")

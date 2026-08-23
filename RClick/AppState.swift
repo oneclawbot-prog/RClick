@@ -79,12 +79,13 @@ class AppState: ObservableObject, ActionStateProviding {
     }
 
     @MainActor
-    func updateApp(id: String, itemName: String, arguments: [String], environment: [String: String]) {
+    func updateApp(id: String, itemName: String, arguments: [String], environment: [String: String], opensNewInstance: Bool = false) {
         if let index = apps.firstIndex(where: { $0.id == id }) {
             var updatedApp = apps[index]
             updatedApp.itemName = itemName
             updatedApp.arguments = arguments
             updatedApp.environment = environment
+            updatedApp.opensNewInstance = opensNewInstance
             apps[index] = updatedApp
             try? save()
         }
