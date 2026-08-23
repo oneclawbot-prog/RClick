@@ -4498,6 +4498,238 @@
           }
         }
       }
+    },
+    "Launch at login is pending approval in System Settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Launch at login is pending approval in System Settings"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar sesión automáticamente está pendiente de aprobación en Ajustes del Sistema"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ログイン時に起動するにはシステム設定での承認が必要です"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开机启动需在系统设置中批准"
+          }
+        }
+      }
+    },
+    "Launch at login requires RClick to be installed in /Applications": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Launch at login requires RClick to be installed in /Applications"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para iniciar sesión automáticamente, RClick debe instalarse en /Applications"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ログイン時に起動するには RClick を /Applications にインストールする必要があります"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开机启动需要将 RClick 安装到 /Applications 目录"
+          }
+        }
+      }
+    },
+    "Update via Mac App Store": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update via Mac App Store"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar desde la Mac App Store"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac App Store からアップデート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 Mac App Store 更新"
+          }
+        }
+      }
+    },
+    "RClick is installed from the Mac App Store. Please update it from the App Store.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick is installed from the Mac App Store. Please update it from the App Store."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick se instaló desde la Mac App Store. Actualízalo desde la App Store."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick は Mac App Store からインストールされています。App Store からアップデートしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick 是从 Mac App Store 安装的。请从 App Store 更新。"
+          }
+        }
+      }
+    },
+    "Open App Store": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open App Store"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir App Store"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Store を開く"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 App Store"
+          }
+        }
+      }
+    },
+    "Later": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Más tarde"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "後で"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "稍后"
+          }
+        }
+      }
+    },
+    "RClick needs access to this folder to delete, create, and modify files. Choose this folder or a broader parent folder to cover its subfolders. You can manage these grants in Settings → Folder Permissions.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick needs access to this folder to delete, create, and modify files. Choose this folder or a broader parent folder to cover its subfolders. You can manage these grants in Settings → Folder Permissions."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick necesita acceso a esta carpeta para eliminar, crear y modificar archivos. Elige esta carpeta o una carpeta principal más amplia para cubrir también sus subcarpetas. Puedes administrar estos permisos en Ajustes → Permisos de carpetas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick がこのフォルダ内のファイルを削除・作成・変更するにはアクセス権が必要です。このフォルダ、またはより上位のフォルダを選択するとサブフォルダもカバーされます。許可は設定 → フォルダ権限で管理できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RClick 需要访问此文件夹以删除、创建和修改文件。请选择此文件夹或更上层的父文件夹以覆盖其子文件夹。可在 设置 → 文件夹权限 中管理这些授权。"
+          }
+        }
+      }
+    },
+    "Authorizes this folder and all its subfolders": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authorizes this folder and all its subfolders"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriza esta carpeta y todas sus subcarpetas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このフォルダとそのすべてのサブフォルダを許可します"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权此文件夹及其所有子文件夹"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

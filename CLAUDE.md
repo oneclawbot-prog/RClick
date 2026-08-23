@@ -34,26 +34,25 @@ RClick follows a dual-process architecture:
 
 ### 3. Communication Layer
 The main app and extension communicate via `DistributedNotificationCenter`:
-- **Extension → App**: `RClick.MessageFromFinder` (actions, file operations)
-- **App → Extension**: `RClick.MessageFromApp` (menu updates, config changes)
-- Protocol defined in: [specs/001-macos-app-macos/contracts/app-extension-communication.md](specs/001-macos-app-macos/contracts/app-extension-communication.md)
-- Implementation: [Messager.swift](RClick/Shared/Messager.swift)
+- **Extension → App**: `RClick.ExtensionToMain` (click events, heartbeat, requestConfig)
+- **App → Extension**: `RClick.MainToExtension` (menu config, running, quit, actionAck)
+- Messages are HMAC-SHA256 signed (`MessageSecurity`) and JSON-encoded via `Messager`
+- Implementation: [Messager.swift](Shared/Messager.swift)
 
 ### 4. State Management
-- **AppState**: Centralized `ObservableObject` managing all app state
-  - Apps: External applications that can open files
-  - Dirs: Permissive directories (with security bookmarks)
-  - Actions: Custom context menu actions
-  - NewFiles: File templates for creation
-  - CommonDirs: Quick access folders
-- Persistence: SwiftData with shared container between app and extension
-- Location: [AppState.swift](RClick/AppState.swift)
+- **AppState**: `@MainActor ObservableObject` holding runtime state (in-memory config arrays, fold toggles, `BookmarkManager`)
+- **ConfigService**: SwiftData config load/save/reset (persistence separated from runtime state)
+- **RCRuntime**: in-process dependency container (`RClick/Runtime/`) holding AppState + ConfigService + MenuService + ActionService + PermissionService + Messager. **It is NOT a separate process / Helper.**
+- **BookmarkManager**: security-scoped bookmarks — the only folder-authorization mechanism (mandatory for the sandboxed App Store build)
+- Data categories: Apps (external apps), Actions (context menu actions), NewFiles (file templates), CommonDirs (quick access folders), BookmarkEntity (authorized folder credentials)
+- Persistence: SwiftData with shared App Group container between app and extension
+- Location: [AppState.swift](RClick/AppState.swift) / [RClick/Runtime/](RClick/Runtime/)
 
 ### 5. Data Models
-All models are in [RClick/Model/](RClick/Model/):
-- `Models.swift`: SwiftData `@Model` definitions (PermDir, OpenWithApp, RCAction, NewFile, CommonDir)
-- `RCBase.swift`: Base protocol for common functionality
-- `ModelContainer.swift`: Shared SwiftData container configuration
+SwiftData `@Model` entities are in [RClick/Model/](RClick/Model/), one file per entity:
+- `AppEntity.swift`, `ActionEntity.swift`, `NewFileTypeEntity.swift`, `CommonDirEntity.swift`, `BookmarkEntity.swift`, `DataVersion.swift`
+- In-memory models & IPC DTOs are in [Shared/RCBase.swift](Shared/RCBase.swift) (`OpenWithApp`, `RCAction`, `NewFile`, `CommonDir`, `AppMenuItem`, `ActionMenuItem`, …)
+- `ModelContainer.swift`: Shared App Group SwiftData container configuration
 
 ## Build and Development Commands
 
@@ -88,31 +87,30 @@ swiftlint
 
 ### Adding New Context Menu Actions
 
-1. Define action model in [Models.swift](RClick/Model/Models.swift)
+1. Define action model in [Shared/RCBase.swift](Shared/RCBase.swift)
 2. Add to `RCAction.all` static property
-3. Handle action in [RClickApp.swift](RClick/RClickApp.swift) in `actionHandler()` method
-4. Extension receives action via menu callback and sends message to main app
+3. Handle action in [ActionService.swift](RClick/Runtime/ActionService.swift) in `actionHandler()` method
+4. Extension receives action via menu callback and sends `.click` message to main app (via `Messager`)
 
 ### Adding New File Templates
 
-1. Add to `NewFile` model in [Models.swift](RClick/Model/Models.swift)
+1. Add to `NewFile` model in [Shared/RCBase.swift](Shared/RCBase.swift)
 2. Add template file to [Assets.xcassets](RClick/Assets.xcassets/)
-3. Handle creation in [RClickApp.swift](RClick/RClickApp.swift) in `createFile()` method
+3. Handle creation in [ActionService.swift](RClick/Runtime/ActionService.swift) in `createFile()` method
 
 ### Inter-Process Communication
 
 When adding new message types:
-1. Define `MessagePayload` structure in [Messager.swift](RClick/Shared/Messager.swift)
-2. Register message handler in appropriate init method
-3. Update contract documentation in [specs/001-macos-app-macos/contracts/app-extension-communication.md](specs/001-macos-app-macos/contracts/app-extension-communication.md)
+1. Define the message enum case + payload in [Messager.swift](Shared/Messager.swift)
+2. Register message handler in the appropriate `init` / `applicationDidFinishLaunching`
+3. If the extension needs to detect whether the main app received a message, add a matching ack message
 
 ### Security-Scoped Resource Access
 
-When working with files outside app sandbox:
-1. User must grant permission via `NSOpenPanel`
-2. Store bookmark data using `URL.bookmarkData(options: ...)`
-3. Access files with `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()`
-4. See `deleteFoldorFile()` and `createFile()` in [RClickApp.swift](RClick/RClickApp.swift) for examples
+When working with files outside the sandbox container (required for the App Store build):
+1. Check `PermissionService.hasAccess(to:)` (bookmark prefix match, covers subtree)
+2. If not authorized, `PermissionService.promptForPermission(for:)` shows `NSOpenPanel` (powerbox) → user grants once → bookmark cached
+3. See [BookmarkManager.swift](RClick/Shared/BookmarkManager.swift) (implementation) and [ActionService.swift](RClick/Runtime/ActionService.swift) (usage in delete/create/hide/open)
 
 ## Important Constraints
 
@@ -123,9 +121,10 @@ When working with files outside app sandbox:
 - **Target macOS 15 Sequoia and above only**
 
 ### Extension Development
-- Extension runs in separate process with limited memory
-- Must handle `isHostAppOpen` state - don't block if main app not available
-- Use heartbeat mechanism to verify main app is running
+- Extension runs in separate process with limited memory (keep it a thin renderer + event forwarder)
+- **Connection state is a UX cache, not a reliability mechanism**: the extension tracks "last message from main app" (`lastMainActivity`, 30s timeout) to show a disabled "RClick is not running" menu — it does NOT determine operation success
+- **Real liveness check is at click time**: extension sends `.click`; main app replies `.actionAck`; if no ack in 3s, extension shows a "RClick did not respond" alert
+- On `.quit` the extension immediately marks itself offline (no 30s "zombie" window)
 - See [FinderSyncExt.swift](FinderSyncExt/FinderSyncExt.swift)
 
 ### Logging
@@ -154,15 +153,16 @@ When working with files outside app sandbox:
 RClick/
 ├── RClick/                        # Main application target
 │   ├── RClickApp.swift           # App entry point & AppDelegate
-│   ├── AppState.swift            # Global state management
-│   ├── Model/                    # SwiftData models
+│   ├── AppState.swift            # Runtime state
+│   ├── Runtime/                  # In-process service layer (MenuService/ActionService/PermissionService/ConfigService/RCRuntime)
+│   ├── Model/                    # SwiftData entities
 │   ├── Settings/                 # Settings views (UI)
-│   ├── Shared/                   # Utilities & services
+│   ├── Shared/                   # Utilities (BookmarkManager, LaunchAtLogin, Updater, …)
 │   ├── Assets.xcassets/          # Images, templates, icons
 │   └── Resources/                # Localization files
-├── FinderSyncExt/                # Finder extension target
-│   ├── FinderSyncExt.swift       # Extension main file
-│   └── MenuItemClickable.swift   # Menu item handlers
+├── FinderSyncExt/                # Finder extension target (thin: render + forward)
+│   └── FinderSyncExt.swift       # Extension main file
+├── Shared/                       # Code shared by app & extension (Messager, RCBase, AppLocalization, …)
 ├── specs/                        # Feature specifications & contracts
 └── RClick.xcodeproj             # Xcode project
 ```

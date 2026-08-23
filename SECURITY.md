@@ -45,7 +45,7 @@ We follow a coordinated disclosure process:
 
 As a macOS Finder extension, RClick has these security-sensitive areas:
 
-- **File System Access** — RClick uses security-scoped bookmarks and requires Full Disk Access permissions. We follow Apple's sandboxing guidelines.
+- **File System Access** — RClick is sandboxed and uses security-scoped bookmarks for per-folder authorization: file operations check `PermissionService.hasAccess(to:)`; un-authorized folders trigger a one-time `NSOpenPanel` grant that is cached as a bookmark. Full Disk Access is not used.
 - **Inter-Process Communication** — Messages between the main app and FinderSync Extension use `DistributedNotificationCenter`. All message payloads are validated.
 - **Third-Party App Launching** — RClick can launch external applications with custom arguments. Arguments are properly escaped to prevent injection.
 

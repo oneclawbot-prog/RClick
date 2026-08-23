@@ -21,8 +21,8 @@ enum MainToExtensionAction: String, Codable {
     case running = "running"
     /// 主程序退出通知
     case quit = "quit"
-    /// 响应菜单配置请求（携带菜单配置）
-    case requestConfig = "request-config"
+    /// 确认已收到点击事件（用于扩展判断主程序是否可通信）
+    case actionAck = "action-ack"
 }
 
 /// Extension 发送给主程序的消息类型
@@ -223,8 +223,9 @@ class Messager: @unchecked Sendable {
     static let shared = Messager()
 
     // 消息处理器存储
-    // 安全说明：仅在 init/启动阶段写入一次，之后只读不写
-    // 写入发生在分布式通知到达之前，无并发读写风险
+    // 写入：启动阶段主线程注册；读取：DistributedNotificationCenter 回调线程。
+    // Swift 6 严格并发下用锁保护，避免数据竞争（原 nonisolated(unsafe) 无同步）。
+    private let handlersLock = NSLock()
     nonisolated(unsafe) private var mainToExtensionHandlers: [MainToExtensionAction: (Data?) -> Void] = [:]
     nonisolated(unsafe) private var extensionToMainHandlers: [ExtensionToMainAction: (Data?) -> Void] = [:]
 
@@ -299,12 +300,16 @@ class Messager: @unchecked Sendable {
 
     /// Extension 注册主程序消息处理器
     func onMainMessage(_ action: MainToExtensionAction, handler: @escaping (Data?) -> Void) {
+        handlersLock.lock()
         mainToExtensionHandlers[action] = handler
+        handlersLock.unlock()
     }
 
     /// 主程序注册 Extension 消息处理器
     func onExtensionMessage(_ action: ExtensionToMainAction, handler: @escaping (Data?) -> Void) {
+        handlersLock.lock()
         extensionToMainHandlers[action] = handler
+        handlersLock.unlock()
     }
 
     // MARK: - 处理消息
@@ -320,7 +325,11 @@ class Messager: @unchecked Sendable {
             let message = try JSONDecoder().decode(MainToExtensionMessage.self, from: jsonData)
             logger.debug("Received main-to-extension message: \(message.action.rawValue)")
 
-            if let handler = mainToExtensionHandlers[message.action] {
+            handlersLock.lock()
+            let handler = mainToExtensionHandlers[message.action]
+            handlersLock.unlock()
+
+            if let handler {
                 handler(message.signedData)
             } else {
                 logger.warning("No handler registered for action: \(message.action.rawValue)")
@@ -341,7 +350,11 @@ class Messager: @unchecked Sendable {
             let message = try JSONDecoder().decode(ExtensionToMainMessage.self, from: jsonData)
             logger.debug("Received extension-to-main message: \(message.action.rawValue)")
 
-            if let handler = extensionToMainHandlers[message.action] {
+            handlersLock.lock()
+            let handler = extensionToMainHandlers[message.action]
+            handlersLock.unlock()
+
+            if let handler {
                 handler(message.signedData)
             } else {
                 logger.warning("No handler registered for action: \(message.action.rawValue)")
@@ -369,6 +382,11 @@ class Messager: @unchecked Sendable {
         sendToExtension(.quit, data: Optional<Int>.none)
     }
 
+    /// 发送点击事件确认（主程序已收到 click，供扩展判断可通信性）
+    func sendActionAck() {
+        sendToExtension(.actionAck, data: Optional<Int>.none)
+    }
+
     /// Extension 发送心跳
     func sendHeartbeat() {
         sendToMain(.heartbeat, data: Optional<Int>.none)
@@ -382,11 +400,6 @@ class Messager: @unchecked Sendable {
     /// Extension 发送点击事件
     func sendClickEvent(_ event: ClickEventPayload) {
         sendToMain(.click, data: event)
-    }
-
-    /// 主程序响应菜单配置请求
-    func respondMenuConfigRequest(_ config: MenuConfigPayload) {
-        sendToExtension(.requestConfig, data: config)
     }
 
     // MARK: - 解码辅助

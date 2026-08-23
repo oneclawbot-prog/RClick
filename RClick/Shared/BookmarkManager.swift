@@ -38,43 +38,52 @@ final class BookmarkManager: ObservableObject {
         guard let entities = try? context.fetch(descriptor) else { return }
 
         for entity in entities {
+            // resolve 抛错 = bookmark 真失效（路径被删/移动导致无法解析）→ 删除脏数据
+            let url: URL
+            var isStale = false
             do {
-                var isStale = false
-                let url = try URL(
+                url = try URL(
                     resolvingBookmarkData: entity.bookmarkData,
                     options: .withSecurityScope,
                     relativeTo: nil,
                     bookmarkDataIsStale: &isStale
                 )
+            } catch {
+                logger.error("恢复 bookmark 失败，删除脏数据：\(entity.pathString) — \(error.localizedDescription)")
+                context.delete(entity)
+                continue
+            }
 
-                if isStale {
-                    // 刷新 bookmark
-                    guard url.startAccessingSecurityScopedResource() else {
-                        logger.warning("无法恢复 bookmark（startAccessing 失败）：\(entity.pathString)")
-                        continue
-                    }
+            if isStale {
+                // 刷新 bookmark
+                guard url.startAccessingSecurityScopedResource() else {
+                    logger.warning("无法访问 bookmark（startAccessing 失败，可能是外置盘未挂载，跳过不删）：\(entity.pathString)")
+                    continue
+                }
+                do {
                     let newData = try url.bookmarkData(
                         options: .withSecurityScope,
                         includingResourceValuesForKeys: nil,
                         relativeTo: nil
                     )
                     entity.bookmarkData = newData
-                    url.stopAccessingSecurityScopedResource()
+                } catch {
+                    logger.error("刷新 bookmark 失败，保留旧数据：\(entity.pathString) — \(error.localizedDescription)")
                 }
-
-                guard url.startAccessingSecurityScopedResource() else {
-                    logger.warning("无法恢复 bookmark（startAccessing 失败）：\(entity.pathString)")
-                    continue
-                }
-
-                let normalized = url.resolvingSymlinksInPath()
-                if !authorizedDirectories.contains(normalized) {
-                    authorizedDirectories.append(normalized)
-                }
-                logger.debug("已恢复 bookmark：\(entity.pathString)")
-            } catch {
-                logger.error("恢复 bookmark 失败：\(entity.pathString) — \(error.localizedDescription)")
+                url.stopAccessingSecurityScopedResource()
             }
+
+            // startAccessing 失败 = 临时不可达（外置盘未挂载等），不立即删，下次启动再试
+            guard url.startAccessingSecurityScopedResource() else {
+                logger.warning("无法访问 bookmark（startAccessing 失败，跳过不删）：\(entity.pathString)")
+                continue
+            }
+
+            let normalized = url.resolvingSymlinksInPath()
+            if !authorizedDirectories.contains(normalized) {
+                authorizedDirectories.append(normalized)
+            }
+            logger.debug("已恢复 bookmark：\(entity.pathString)")
         }
         try? context.save()
         logger.info("Bookmark 恢复完成：\(self.authorizedDirectories.count) 个目录")
@@ -105,7 +114,7 @@ final class BookmarkManager: ObservableObject {
         defer { isPrompting = false }
 
         let panel = NSOpenPanel()
-        panel.message = AppLocalization.localized("Grant RClick access to this folder to perform file operations.")
+        panel.message = AppLocalization.localized("RClick needs access to this folder to delete, create, and modify files. Choose this folder or a broader parent folder to cover its subfolders. You can manage these grants in Settings → Folder Permissions.")
         panel.prompt = AppLocalization.localized("Grant Access")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true

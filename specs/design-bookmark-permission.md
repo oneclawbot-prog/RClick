@@ -267,10 +267,11 @@ LabeledContent {
 
 ## 七、保持不变的部分
 
-- **entitlements**：保留 `home-relative-path.read-write` 作为非 TCC 目录的后备
 - **Accessibility 权限**：`revealInFinderAndRename` 仍然需要，不动
 - **Finder Extension 权限**：不动
 - **CommonDirEntity**：不动，独立于 Bookmark
+
+> ⚠️ **更新（v2.2.0）**：原"保留 `home-relative-path.read-write` 作为非 TCC 目录后备"的约定已作废 —— App Store 审核不接受临时例外。主 app 已开启沙盒（`com.apple.security.app-sandbox`）并移除全部 `temporary-exception.*`，bookmark 成为唯一文件夹授权途径。另补 `com.apple.security.network.client`（更新检查需要）。
 
 ---
 

@@ -102,7 +102,35 @@ extension LaunchAtLogin {
         }
 
         public var body: some View {
-            SwiftUI.Toggle(isOn: $launchAtLogin.isEnabled) { label }
+            VStack(alignment: .leading, spacing: 4) {
+                SwiftUI.Toggle(isOn: $launchAtLogin.isEnabled) { label }
+                if let warningKey = warningMessageKey {
+                    SwiftUI.Label {
+                        Text(AppLocalization.localized(warningKey))
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .font(.footnote)
+                    .foregroundColor(.yellow)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+
+        /// 当登录项实际未生效时给出提示：
+        /// - .requiresApproval：macOS 13+ 首次启用需用户在系统设置批准
+        /// - 其他非 enabled：多半是 app 不在 /Applications（Debug 从 Xcode 跑就是这种）
+        private var warningMessageKey: String? {
+            switch SMAppService.mainApp.status {
+            case .enabled:
+                return nil
+            case .requiresApproval:
+                return "Launch at login is pending approval in System Settings"
+            case .notRegistered, .notFound:
+                return "Launch at login requires RClick to be installed in /Applications"
+            @unknown default:
+                return nil
+            }
         }
     }
 }
