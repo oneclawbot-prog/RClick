@@ -69,12 +69,12 @@ struct NewFileSettingsTabView: View {
                                 .help(AppLocalization.localized("Delete File Type"))
 
                                 Toggle(AppLocalization.localized("Enabled"), isOn: $item.enabled)
-                                    .toggleStyle(.switch)
+                                    .toggleStyle(.checkbox)
+                                    .labelsHidden()
                                     .onChange(of: item.enabled) {
                                         appState.toggleActionItem()
                                         messager.sendRunningNotification()
                                     }
-                                    .labelsHidden()
                             }
                         } label: {
                             HStack(spacing: 8) {

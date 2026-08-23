@@ -28,12 +28,12 @@ struct ActionSettingsTabView: View {
                     ForEach($appState.actions) { $item in
                         LabeledContent {
                             Toggle(AppLocalization.localized("Enabled"), isOn: $item.enabled)
-                                .toggleStyle(.switch)
+                                .toggleStyle(.checkbox)
+                                .labelsHidden()
                                 .onChange(of: item.enabled) {
                                     appState.toggleActionItem()
                                     messager.sendRunningNotification()
                                 }
-                                .labelsHidden()
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "line.3.horizontal")
@@ -41,6 +41,7 @@ struct ActionSettingsTabView: View {
                                 Label(item.displayName, systemImage: item.icon)
                             }
                         }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 2, bottom: 8, trailing: 2))
                     }
                     .onMove { source, destination in
                         appState.moveActions(from: source, to: destination)
