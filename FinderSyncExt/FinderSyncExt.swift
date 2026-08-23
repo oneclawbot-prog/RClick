@@ -49,6 +49,19 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
     /// 消息管理器
     private let messager = Messager.shared
 
+    // MARK: - 连接状态（UX 优化，非可靠性机制）
+
+    /// 最近一次收到主程序消息的时间
+    private var lastMainActivity = Date()
+
+    /// 是否认为主程序可通信（连续 3 次心跳未收到即判离线）
+    private var isHostAppRunning: Bool {
+        Date().timeIntervalSince(lastMainActivity) < 30
+    }
+
+    /// 待确认的点击事件 ack 计时器
+    private var pendingAckWorkItem: DispatchWorkItem?
+
     // MARK: - Initialization
 
     override init() {
@@ -93,6 +106,7 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
         // 处理主程序发送的菜单配置
         messager.onMainMessage(.menuConfig) { [weak self] data in
             guard let self = self else { return }
+            self.markMainActivity()
             // 使用 decodeSignedData 解码签名数据
             if let config = self.messager.decodeSignedData(data, as: MenuConfigPayload.self) {
                 self.handleMenuConfig(config)
@@ -104,17 +118,85 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
         // 处理主程序发送的 running 通知
         messager.onMainMessage(.running) { [weak self] data in
             guard let self = self else { return }
+            self.markMainActivity()
             if let payload = self.messager.decodeSignedData(data, as: RunningPayload.self) {
                 logger.info("Received running notification: \(payload.directories)")
                 // 可以根据 payload 更新监听目录
             }
         }
 
-        // 处理主程序发送的退出通知
-        messager.onMainMessage(.quit) { _ in
+        // 处理主程序发送的退出通知：立即置离线，消除"退出后 30s 假活"窗口
+        messager.onMainMessage(.quit) { [weak self] _ in
             logger.info("Received quit notification from main app")
-            // 可以标记主程序已退出
+            self?.markMainOffline()
         }
+
+        // 点击事件确认：主程序已收到 click，取消 ack 超时提示
+        messager.onMainMessage(.actionAck) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.handleAck()
+            }
+        }
+    }
+
+    // MARK: - 连接状态辅助
+
+    /// 记录主程序最近活动（统一到主线程，避免 DNC 回调线程写 / menu 主线程读竞争）
+    private func markMainActivity() {
+        DispatchQueue.main.async { [weak self] in
+            self?.lastMainActivity = Date()
+        }
+    }
+
+    /// 标记主程序离线（收到 .quit 时立即生效）
+    private func markMainOffline() {
+        DispatchQueue.main.async { [weak self] in
+            self?.lastMainActivity = .distantPast
+        }
+    }
+
+    /// 发送点击事件：离线先提示；在线则等待 ack，超时无响应再提示
+    private func sendClickEvent(_ event: ClickEventPayload) {
+        guard isHostAppRunning else {
+            Task { @MainActor in
+                self.showAlert(
+                    title: AppLocalization.localized("RClick is not running"),
+                    message: AppLocalization.localized("This action requires RClick to be running. Please launch RClick and try again.")
+                )
+            }
+            return
+        }
+        messager.sendClickEvent(event)
+        awaitAck()
+    }
+
+    /// 启动 ack 等待：主程序收到 click 后回 actionAck，超时未收到则提示操作可能未执行
+    private func awaitAck() {
+        pendingAckWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                self?.showAlert(
+                    title: AppLocalization.localized("RClick did not respond"),
+                    message: AppLocalization.localized("The operation may not have been executed. Please check that RClick is running.")
+                )
+            }
+        }
+        pendingAckWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
+    }
+
+    /// 收到 ack，取消超时提示
+    private func handleAck() {
+        pendingAckWorkItem?.cancel()
+        pendingAckWorkItem = nil
+    }
+
+    @MainActor private func showAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: AppLocalization.localized("OK"))
+        alert.runModal()
     }
 
     /// 处理菜单配置
@@ -168,7 +250,7 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
     }
 
     override var toolbarItemToolTip: String {
-        return "RClick: Click for menu options"
+        return AppLocalization.localized("RClick: Click for menu options")
     }
 
     override var toolbarItemImage: NSImage {
@@ -245,6 +327,13 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
         logger.info("构建菜单，触发方式: \(menuKindLabel)")
 
         let menu = NSMenu(title: "RClick")
+
+        // 连接状态缓存：主程序离线时，显示置灰提示而非可点击菜单（避免"点了没反应"）
+        guard isHostAppRunning else {
+            menu.addItem(withTitle: AppLocalization.localized("RClick is not running"), action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: AppLocalization.localized("Restart RClick to restore the menu"), action: nil, keyEquivalent: "")
+            return menu
+        }
 
         // 如果缓存为空，触发请求并返回加载中的菜单
         guard let config = cachedMenuConfig else {
@@ -419,7 +508,7 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
             target: itemPaths,
             trigger: getTriggerForMenuKind()
         )
-        messager.sendClickEvent(event)
+        sendClickEvent(event)
     }
 
     @objc private func handleAppClick(_ sender: NSMenuItem) {
@@ -444,7 +533,7 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
             trigger: getTriggerForMenuKind()
         )
         logger.debug("Sending click event for app: \(app.name)")
-        messager.sendClickEvent(event)
+        sendClickEvent(event)
     }
 
     @objc private func handleNewFileClick(_ sender: NSMenuItem) {
@@ -462,7 +551,7 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
             target: newFileTargetPaths(),
             trigger: getTriggerForMenuKind()
         )
-        messager.sendClickEvent(event)
+        sendClickEvent(event)
     }
 
     @objc private func handleCommonDirClick(_ sender: NSMenuItem) {
@@ -483,7 +572,7 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
             target: target,
             trigger: getTriggerForMenuKind()
         )
-        messager.sendClickEvent(event)
+        sendClickEvent(event)
     }
 
     // MARK: - Helper Methods

@@ -26,6 +26,7 @@ struct SettingsWindow: Scene {
                     UpdateView(updateManager: updateManager)
                 }
         }
+        .commandsRemoved()
         .windowResizability(.contentSize)
         .defaultSize(width: 700, height: 480)
     }

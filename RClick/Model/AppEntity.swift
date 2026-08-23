@@ -20,6 +20,8 @@ final class AppEntity {
     var environmentData: Data? // 编码后的字典
     var sortOrder: Int
     var isEnabled: Bool
+    /// 注意：必须带默认值，否则 SwiftData 迁移旧库（已有数据）时无法为旧行赋值而失败
+    var opensNewInstance: Bool = false
     var createdAt: Date
     var updatedAt: Date
 
@@ -31,7 +33,8 @@ final class AppEntity {
          arguments: [String] = [],
          environment: [String: String] = [:],
          sortOrder: Int = 0,
-         isEnabled: Bool = true) {
+         isEnabled: Bool = true,
+         opensNewInstance: Bool = false) {
         self.id = id
         self.urlString = url.path(percentEncoded: false)
         self.itemName = itemName
@@ -39,6 +42,7 @@ final class AppEntity {
         self.inheritFromGlobalEnvironment = inheritFromGlobalEnvironment
         self.sortOrder = sortOrder
         self.isEnabled = isEnabled
+        self.opensNewInstance = opensNewInstance
         self.createdAt = Date()
         self.updatedAt = Date()
 
@@ -85,7 +89,8 @@ final class AppEntity {
             inheritFromGlobalEnvironment: openWithApp.inheritFromGlobalEnvironment,
             arguments: openWithApp.arguments,
             environment: openWithApp.environment,
-            sortOrder: sortOrder
+            sortOrder: sortOrder,
+            opensNewInstance: openWithApp.opensNewInstance
         )
     }
 }

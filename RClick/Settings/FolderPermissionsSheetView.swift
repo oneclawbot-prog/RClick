@@ -35,13 +35,22 @@ struct FolderPermissionsSheetView: View {
             } else {
                 List {
                     ForEach(bookmarkManager.authorizedDirectories, id: \.path) { url in
-                        HStack {
+                        HStack(alignment: .center) {
                             Image(systemName: "folder.fill")
                                 .foregroundColor(.accentColor)
-                            Text(url.path)
-                                .font(.body)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(url.lastPathComponent)
+                                    .font(.body)
+                                    .lineLimit(1)
+                                Text(url.path)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Text(AppLocalization.localized("Authorizes this folder and all its subfolders"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                             Spacer()
                             Button {
                                 bookmarkManager.removeDirectory(url)
@@ -52,6 +61,7 @@ struct FolderPermissionsSheetView: View {
                             .buttonStyle(.borderless)
                             .help(AppLocalization.localized("Remove folder permission"))
                         }
+                        .padding(.vertical, 2)
                     }
                 }
                 .frame(minHeight: 200)

@@ -5,6 +5,7 @@
 //  Created by 李旭 on 2024/4/4.
 //
 
+import AppKit
 import SwiftUI
 
 enum Tabs: String, CaseIterable, Identifiable {
@@ -27,6 +28,18 @@ enum Tabs: String, CaseIterable, Identifiable {
         case .about: "info.circle"
         }
     }
+
+    /// 每个 tab 图标对应的圆角色块颜色
+    var iconColor: Color {
+        switch self {
+        case .general: .blue
+        case .apps: .indigo
+        case .actions: .orange
+        case .newFile: .green
+        case .cdirs: .teal
+        case .about: .purple
+        }
+    }
 }
 
 struct SettingsView: View {
@@ -36,39 +49,71 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var sidebar: some View {
-        List(selection: self.$selectedTab) {
-            ForEach(Tabs.allCases, id: \.self) { tab in
-                Label {
-                    Text(appLocalized: tab.rawValue)
-                } icon: {
-                    Image(systemName: tab.icon)
-                }
-                    .labelStyle(.titleAndIcon)
+        VStack(spacing: 0) {
+            // 顶部品牌区：图标 + 名字 + 版本号
+            VStack(spacing: 6) {
+                Image("Logo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 48, height: 48)
+
+                Text("RClick")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+
+                Text("v\(self.getAppVersion())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-        }
-        .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(220)
-        .safeAreaInset(edge: .top) {
-            //  App Icon 部分
-            VStack {
-                HStack {
-                    Spacer()
-                    Image("Logo")
-                        .resizable()
-                        .frame(width: 64, height: 64)
-                    Spacer()
-                }
-                HStack {
-                    Spacer()
-                    Text("RClick").font(.title)
-                    Text("\(self.getAppVersion())")
-                    Spacer()
+            .frame(maxWidth: .infinity)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+
+            // 六个 tab 垂直排列，间距完全由代码控制（无原生 List 隐藏 inset）
+            VStack(spacing: 4) {
+                ForEach(Tabs.allCases, id: \.self) { tab in
+                    sidebarButton(tab)
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 24)
+            .padding(.horizontal, 12)
+
+            Spacer()
         }
-        .toolbar(removing: .sidebarToggle)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .navigationSplitViewColumnWidth(200)
+    }
+
+    /// 侧边栏单个 tab：选中时行背景为图标色的半透明色（如绿色图标 → 半透明绿）
+    private func sidebarButton(_ tab: Tabs) -> some View {
+        let isSelected = selectedTab == tab
+        return Button {
+            selectedTab = tab
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(tab.iconColor)
+                    )
+
+                Text(appLocalized: tab.rawValue)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? tab.iconColor.opacity(0.15) : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder var detailView: some View {
@@ -91,7 +136,6 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(minWidth: 450)
-        .padding()
     }
 
     var body: some View {
@@ -100,6 +144,8 @@ struct SettingsView: View {
         } detail: {
             self.detailView
         }
+        .navigationTitle(AppLocalization.localized(selectedTab.rawValue))
+        .background(Color(NSColor.windowBackgroundColor))
     }
 
     func getAppVersion() -> String {

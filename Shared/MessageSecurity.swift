@@ -105,36 +105,6 @@ public struct SignedPayload<T: Codable>: Codable {
     }
 }
 
-// MARK: - 发送者验证
-
-/// 验证消息发送者身份
-public class SenderValidator {
-
-    /// 允许的 Bundle ID 列表
-    private static let allowedBundleIDs = [
-        "com.lixu.RClick",           // 主程序
-        "com.lixu.RClick.FinderSyncExt"  // FinderSync 扩展
-    ]
-
-    /// 验证发送者 Bundle ID 是否合法
-    /// - Returns: 验证是否通过
-    public static func verifyCurrentProcess() -> Bool {
-        guard let bundleID = Bundle.main.bundleIdentifier else {
-            os_log("Failed to get bundle identifier", log: OSLog.default, type: .error)
-            return false
-        }
-
-        return allowedBundleIDs.contains(bundleID)
-    }
-
-    /// 检查 Bundle ID 是否在白名单中
-    /// - Parameter bundleID: 需要检查的 Bundle ID
-    /// - Returns: 是否合法
-    public static func isAllowedBundleID(_ bundleID: String) -> Bool {
-        return allowedBundleIDs.contains(bundleID)
-    }
-}
-
 // MARK: - 消息完整性检查
 
 extension MessageSecurity {

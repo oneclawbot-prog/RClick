@@ -183,7 +183,14 @@ class UpdateManager: ObservableObject {
     private let githubChecker: GitHubReleaseChecker
     private let preferences: UpdatePreferences
     private let currentVersion: String
-    
+
+    /// 是否来自 Mac App Store（通过 `Contents/_MASReceipt/receipt` 是否存在判断）。
+    /// App Store 构建禁止自更新（MAS 审核要求），改为引导用户去 App Store 更新。
+    private var isAppStoreBuild: Bool {
+        let receiptPath = Bundle.main.bundlePath + "/Contents/_MASReceipt/receipt"
+        return FileManager.default.fileExists(atPath: receiptPath)
+    }
+
     init(owner: String, repo: String, currentVersion: String) {
         self.githubChecker = GitHubReleaseChecker(owner: owner, repo: repo)
         self.preferences = UpdatePreferences()
@@ -225,6 +232,13 @@ class UpdateManager: ObservableObject {
 
     func downloadAndInstallUpdate() async {
         print("start downloadAndInstallUpdate")
+
+        // App Store 构建：禁止自更新，引导用户去 Mac App Store
+        guard !isAppStoreBuild else {
+            showAppStoreUpdateAlert()
+            return
+        }
+
         guard let release = availableUpdate else {
             updateError = AppLocalization.localized("No update is available.")
             print("没有可用的更新")
@@ -273,6 +287,8 @@ class UpdateManager: ObservableObject {
         var request = URLRequest(url: URL(string: asset.browserDownloadUrl)!)
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
         
+        let downloadFailedMessage = AppLocalization.localized("Download failed")
+        
         // 使用 AsyncThrowingStream 来包装下载进度和结果
         return try await withCheckedThrowingContinuation { continuation in
             // Stream bytes and write to destination file
@@ -290,7 +306,7 @@ class UpdateManager: ObservableObject {
                       let httpResponse = response as? HTTPURLResponse,
                       httpResponse.statusCode == 200
                 else {
-                    continuation.resume(throwing: DownloadError.downloadFailed("下载失败"))
+                    continuation.resume(throwing: DownloadError.downloadFailed(downloadFailedMessage))
                     print("downn error")
                     return
                 }
@@ -337,7 +353,7 @@ class UpdateManager: ObservableObject {
         
         guard process.terminationStatus == 0 else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorString = String(data: errorData, encoding: .utf8) ?? "未知错误"
+            let errorString = String(data: errorData, encoding: .utf8) ?? AppLocalization.localized("Unknown error")
             throw InstallationError.zipExtractionFailed(String(format: AppLocalization.localized("Extraction failed: %@"), errorString))
         }
         
@@ -406,6 +422,20 @@ class UpdateManager: ObservableObject {
             print("❌ 安装失败: \(error)")
         }
         
+    }
+
+    // MARK: - App Store 更新引导
+
+    /// App Store 构建：提示用户通过 Mac App Store 更新
+    private func showAppStoreUpdateAlert() {
+        let alert = NSAlert()
+        alert.messageText = AppLocalization.localized("Update via Mac App Store")
+        alert.informativeText = AppLocalization.localized("RClick is installed from the Mac App Store. Please update it from the App Store.")
+        alert.addButton(withTitle: AppLocalization.localized("Open App Store"))
+        alert.addButton(withTitle: AppLocalization.localized("Later"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(URL(string: "macappstore://")!)
+        }
     }
 
     // MARK: - 显示安装完成提示

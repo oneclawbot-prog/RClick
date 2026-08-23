@@ -26,6 +26,8 @@ struct OpenWithApp: @MainActor RCBase {
     var inheritFromGlobalEnvironment = true
     var arguments: [String] = []
     var environment: [String: String] = [:]
+    /// 是否以新实例（新窗口）打开（对应 NSWorkspace.OpenConfiguration.createsNewApplicationInstance）
+    var opensNewInstance = false
 
     nonisolated var appName: String {
         FileManager.default.displayName(atPath: url.path)

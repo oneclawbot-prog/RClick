@@ -17,7 +17,6 @@ struct GeneralSettingsTabView: View {
     @AppLog(category: "settings-general")
     private var logger
 
-    @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage(Key.showMenuBarExtra, store: .group) private var showMenuBarExtra = true
     @EnvironmentObject var store: AppState
     @ObservedObject private var bookmarkManager = AppState.shared.bookmarkManager
@@ -36,43 +35,28 @@ struct GeneralSettingsTabView: View {
         Form {
             // MARK: - 第一组：主要控制
             Section {
-                Toggle(isOn: Binding(
-                    get: { finderSyncStatus == .enabled },
-                    set: { newValue in
-                        if newValue {
-                            // 开启：如果未启用，打开文件提供程序设置
-                            if !FIFinderSyncController.isExtensionEnabled {
-                                openFileProviderSettings()
-                            }
-                        } else {
-                            // 关闭：同样打开设置让用户手动关闭
-                            openFileProviderSettings()
-                        }
-                    }
-                )) {
-                    Text(appLocalized: "Enable RClick")
-                }
-
                 Toggle(isOn: $showMenuBarExtra) {
                     Text(appLocalized: "Show icon in menu bar")
                 }
 
-                Toggle(isOn: $launchAtLogin) {
+                LaunchAtLogin.Toggle {
                     Text(appLocalized: "Launch at login")
                 }
             } header: {
                 Text(appLocalized: "Main Controls")
-            } footer: {
-                Text(appLocalized: "Enable RClick in File Provider to show its actions in Finder context menus")
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // MARK: - 第二组：权限
             Section {
                 // Finder 扩展状态
                 LabeledContent {
-                    Text(finderSyncStatus.description)
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 8) {
+                        Text(finderSyncStatus.description)
+                            .foregroundColor(.secondary)
+                        Button(AppLocalization.localized("Settings…")) {
+                            openFileProviderSettings()
+                        }
+                    }
                 } label: {
                     Label(AppLocalization.localized("Finder Extension"), systemImage: finderSyncStatus.icon)
                         .foregroundColor(finderSyncStatus.color)
