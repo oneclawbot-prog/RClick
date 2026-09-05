@@ -133,8 +133,9 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
 
         // 点击事件确认：主程序已收到 click，取消 ack 超时提示
         messager.onMainMessage(.actionAck) { [weak self] _ in
+            guard let self else { return }
             DispatchQueue.main.async {
-                self?.handleAck()
+                self.handleAck()
             }
         }
     }
@@ -174,8 +175,9 @@ class FinderSyncExt: FIFinderSync, @unchecked Sendable {
     private func awaitAck() {
         pendingAckWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
             Task { @MainActor in
-                self?.showAlert(
+                self.showAlert(
                     title: AppLocalization.localized("RClick did not respond"),
                     message: AppLocalization.localized("The operation may not have been executed. Please check that RClick is running.")
                 )
